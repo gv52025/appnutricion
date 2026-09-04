@@ -20580,6 +20580,13 @@ ${suffix}`;
       await demo(old.patient);
       return insert("plan", { ...clean(old), status: "draft", version: (old.version || 1) + 1, parent: old.id, visit: data.visit, approved_by: "", approved_at: "", dependencies: [] }, old.patient);
     }
+    if (path === "plans/ai") {
+      await demo(data.patient);
+      const result = await client.functions.invoke("clinical-plan-assistant", { body: data });
+      if (result.error) throw new Error(result.error.message);
+      if (result.data?.error) throw new Error(result.data.error);
+      return result.data;
+    }
     if (path === "documents") {
       await demo(data.patient);
       const binary = Uint8Array.from(atob(data.base64), (c) => c.charCodeAt(0));
