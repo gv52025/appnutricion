@@ -20626,7 +20626,15 @@ ${suffix}`;
       unwrap(await client.from("app_settings").upsert({ workspace_id: workspace, key, value: data, updated_by: session.user.id }));
       return { ok: true };
     }
-    if (path === "ai" || path === "documents/ocr") throw new Error("La IA requiere configurar una clave OpenAI segura en Supabase; no se generan resultados simulados.");
+    if (path === "ai") {
+      await demo(data.patient);
+      if (!data.send_confirmed) throw new Error("Confirma el env\xEDo del contexto revisado.");
+      const result = await client.functions.invoke("clinical-assistant", { body: data });
+      if (result.error) throw new Error(result.error.message);
+      if (result.data?.error) throw new Error(result.data.error);
+      return result.data;
+    }
+    if (path === "documents/ocr") throw new Error("La extracci\xF3n OCR estructurada es el siguiente m\xF3dulo pendiente; el original permanece guardado.");
     throw new Error("Esta operaci\xF3n se habilitar\xE1 despu\xE9s de trasladar su validaci\xF3n cl\xEDnica a Supabase.");
   }
   window.supabaseCloud = { api: cloudApi };
