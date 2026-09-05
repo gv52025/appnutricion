@@ -20606,10 +20606,7 @@ ${suffix}`;
     }
     if (path === "plans/ai") {
       await demo(data.patient);
-      const result = await client.functions.invoke("clinical-plan-assistant", { body: data });
-      if (result.error) throw new Error(result.error.message);
-      if (result.data?.error) throw new Error(result.data.error);
-      return result.data;
+      return invoke("clinical-plan-assistant", data);
     }
     if (path === "documents") {
       await demo(data.patient);
