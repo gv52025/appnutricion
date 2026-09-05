@@ -20593,6 +20593,12 @@ ${suffix}`;
       const body = { ...clean(data), status: "draft", version: data.version || 1, approved_by: "", approved_at: "", dependencies: [] };
       return data.id ? update(data.id, body) : insert("plan", body, data.patient);
     }
+    if (path === "prescriptions") {
+      await demo(data.patient);
+      if (!data.approved) throw new Error("Confirma la revisi\xF3n profesional.");
+      const body = { ...clean(data), status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString() };
+      return data.id ? update(data.id, body) : insert("nutrition_prescription", body, data.patient);
+    }
     if (path === "plans/approve") {
       const old = await row(data.id);
       await demo(old.patient_id);
@@ -20613,7 +20619,9 @@ ${suffix}`;
     }
     if (path === "plans/ai") {
       await demo(data.patient);
-      return invoke("clinical-plan-assistant", data);
+      const rx = unwrap(await client.from("records").select("id,body").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "nutrition_prescription").eq("body->>visit", data.visit).eq("body->>status", "approved").maybeSingle());
+      if (!rx) throw new Error("Aprueba primero la preparaci\xF3n cl\xEDnica del plan.");
+      return invoke("clinical-plan-assistant", { ...data, plan_days: Number(rx.body?.rules?.days || 7) });
     }
     if (path === "documents") {
       await demo(data.patient);
