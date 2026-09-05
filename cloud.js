@@ -20641,7 +20641,15 @@ ${suffix}`;
       if (result.data?.error) throw new Error(result.data.error);
       return result.data;
     }
-    if (path === "documents/ocr") throw new Error("La extracci\xF3n OCR estructurada es el siguiente m\xF3dulo pendiente; el original permanece guardado.");
+    if (path === "documents/ocr") {
+      const doc = record(await row(data.id));
+      await demo(doc.patient);
+      if (!doc.identity_verified) throw new Error("Primero coteja la identidad del documento.");
+      const result = await client.functions.invoke("extract-clinical-document", { body: { document_id: data.id, send_confirmed: data.send_confirmed } });
+      if (result.error) throw new Error(result.error.message);
+      if (result.data?.error) throw new Error(result.data.error);
+      return result.data;
+    }
     throw new Error("Esta operaci\xF3n se habilitar\xE1 despu\xE9s de trasladar su validaci\xF3n cl\xEDnica a Supabase.");
   }
   window.supabaseCloud = { api: cloudApi };
