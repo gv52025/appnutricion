@@ -20559,6 +20559,12 @@ ${suffix}`;
       const body = { ...clean(data), status: "draft", author: session.user.email, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), source_snapshot: data.source_snapshot || {} };
       return data.id ? update(data.id, body) : insert("evaluation", body, data.patient);
     }
+    if (path === "demo/yuri") {
+      const result = await client.functions.invoke("seed-yuri-demo", { body: data });
+      if (result.error) throw new Error(result.error.message);
+      if (result.data?.error) throw new Error(result.data.error);
+      return result.data;
+    }
     if (path === "foods") {
       if (!data.confirmed) throw new Error("Confirma la composici\xF3n ficticia y su fuente.");
       return insert("food", { name: data.name, state: data.state, source: data.source, nutrients: { kcal: Number(data.kcal), protein: Number(data.protein), carbs: Number(data.carbs), fat: Number(data.fat) }, basis: "100 g", status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString() });
