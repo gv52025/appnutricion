@@ -20554,6 +20554,11 @@ ${suffix}`;
       await demo(old.patient_id);
       return update(data.id, { ...data, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), reviewed_by: session.user.email });
     }
+    if (path === "evaluations") {
+      await demo(data.patient);
+      const body = { ...clean(data), status: "draft", author: session.user.email, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), source_snapshot: data.source_snapshot || {} };
+      return data.id ? update(data.id, body) : insert("evaluation", body, data.patient);
+    }
     if (path === "foods") {
       if (!data.confirmed) throw new Error("Confirma la composici\xF3n ficticia y su fuente.");
       return insert("food", { name: data.name, state: data.state, source: data.source, nutrients: { kcal: Number(data.kcal), protein: Number(data.protein), carbs: Number(data.carbs), fat: Number(data.fat) }, basis: "100 g", status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString() });
