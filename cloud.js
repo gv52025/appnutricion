@@ -20553,6 +20553,14 @@ ${suffix}`;
       await demo(old.patient_id);
       return update(data.id, data);
     }
+    if (path === "visits/clinical-section") {
+      const old = await row(data.id);
+      await demo(old.patient_id);
+      if (old.kind !== "visit" || old.body?.status !== "draft") throw new Error("Solo puedes modificar una consulta en borrador.");
+      const allowed = ["identification", "family", "conditions", "surgeries", "allergies", "digestive", "sleep", "activity", "consumptions", "hormonal", "signs", "dietary_context", "intake", "frequency", "followup"];
+      if (!allowed.includes(data.section)) throw new Error("Secci\xF3n cl\xEDnica no v\xE1lida.");
+      return update(data.id, { rev: data.rev, clinical_sections: { ...old.body?.clinical_sections || {}, [data.section]: data.value }, clinical_sections_updated_at: (/* @__PURE__ */ new Date()).toISOString(), clinical_sections_updated_by: session.user.email });
+    }
     if (path === "visits/close") {
       const old = await row(data.id);
       await demo(old.patient_id);
