@@ -20442,6 +20442,19 @@ ${suffix}`;
   };
   var clean = (data) => Object.fromEntries(Object.entries(data).filter(([k]) => !["id", "kind", "rev", "patient", "created", "updated", "stale"].includes(k)));
   var one = (value) => Array.isArray(value) ? value[0] : value;
+  async function invoke(name, body) {
+    const result = await client.functions.invoke(name, { body });
+    if (result.error) {
+      let detail = "";
+      try {
+        detail = (await result.error.context?.json())?.error || "";
+      } catch {
+      }
+      throw new Error(detail || result.error.message);
+    }
+    if (result.data?.error) throw new Error(result.data.error);
+    return result.data;
+  }
   async function context() {
     const member = unwrap(await client.from("workspace_members").select("workspace_id,role").limit(1).maybeSingle());
     if (!member) throw new Error("El usuario no tiene un espacio cl\xEDnico asignado.");
@@ -20647,10 +20660,7 @@ ${suffix}`;
     if (path === "ai") {
       await demo(data.patient);
       if (!data.send_confirmed) throw new Error("Confirma el env\xEDo del contexto revisado.");
-      const result = await client.functions.invoke("clinical-assistant", { body: data });
-      if (result.error) throw new Error(result.error.message);
-      if (result.data?.error) throw new Error(result.data.error);
-      return result.data;
+      return invoke("clinical-assistant", data);
     }
     if (path === "documents/ocr") {
       const doc = record(await row(data.id));
