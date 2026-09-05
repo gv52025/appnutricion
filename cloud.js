@@ -20599,6 +20599,13 @@ ${suffix}`;
       if (!data.clinical_review || !data.consistency_review) throw new Error("Confirma ambas revisiones.");
       return update(data.id, { status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), review_note: data.review_note });
     }
+    if (path === "plans/discard") {
+      const old = await row(data.id);
+      await demo(old.patient_id);
+      if (old.body?.status !== "draft") throw new Error("Solo se puede descartar un borrador activo.");
+      if (String(data.reason || "").trim().length < 5) throw new Error("Registra el motivo del descarte.");
+      return update(data.id, { status: "discarded", discard_reason: String(data.reason).trim(), discarded_by: session.user.email, discarded_at: (/* @__PURE__ */ new Date()).toISOString() });
+    }
     if (path === "plans/clone") {
       const old = record(await row(data.id));
       await demo(old.patient);
