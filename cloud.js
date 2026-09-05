@@ -20603,6 +20603,11 @@ ${suffix}`;
       const old = await row(data.id);
       await demo(old.patient_id);
       if (!data.clinical_review || !data.consistency_review) throw new Error("Confirma ambas revisiones.");
+      const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "nutrition_prescription").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").maybeSingle());
+      if (!rx) throw new Error("Aprueba primero la preparaci\xF3n cl\xEDnica del plan.");
+      const daysRequired = Number(rx.body.rules?.days || 7), mealsRequired = Number(rx.body.rules?.meals_per_day || 3), incomplete = Array.from({ length: daysRequired }, (_, day) => (old.body.items || []).filter((x) => Number(x.day) === day).length < mealsRequired).some(Boolean);
+      if (incomplete) throw new Error("El plan no contiene todos los tiempos solicitados.");
+      if (!(old.body.target_compliance || []).length) throw new Error("Falta la comparaci\xF3n contra los objetivos nutricionales.");
       return update(data.id, { status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), review_note: data.review_note });
     }
     if (path === "plans/discard") {
