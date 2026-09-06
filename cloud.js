@@ -20603,7 +20603,7 @@ ${suffix}`;
       if (!data.confirmed) throw new Error("Confirma la identidad, composici\xF3n y fuente.");
       const name = String(data.canonical_name || "").trim().replace(/\s+/g, " "), brand = String(data.brand || "").trim().replace(/\s+/g, " "), stateCode = String(data.state_code || "");
       const states = { raw: "Crudo", cooked: "Cocido", as_sold: "Como se vende", drained: "Drenado", reconstituted: "Reconstituido", prepared: "Preparado" };
-      const categories = { 1: "Ma\xEDz, cereales y derivados", 2: "Leguminosas", 3: "Verduras y quelites", 4: "Frutas", 5: "Carnes y aves", 6: "Pescados y mariscos", 7: "Huevo", 8: "Leche, l\xE1cteos y sustitutos", 9: "Grasas, semillas y oleaginosas", 10: "Az\xFAcares, bebidas y condimentos", 11: "Productos habituales" }, categoryCode = Number(data.category_code);
+      const categories = { 1: "Ma\xEDz, cereales y derivados", 2: "Leguminosas", 3: "Tub\xE9rculos y pl\xE1tanos", 4: "Verduras y hortalizas", 5: "Frutas", 6: "Carnes, aves y huevo", 7: "Pescados y mariscos", 8: "Leche y derivados", 9: "Grasas, semillas y oleaginosas", 10: "Condimentos y productos culinarios", 11: "Productos habituales" }, categoryCode = Number(data.category_code);
       if (!Number.isInteger(categoryCode) || !categories[categoryCode]) throw new Error("Selecciona una categor\xEDa v\xE1lida del 1 al 11.");
       const method = String(data.preparation_method || "");
       const methods = ["none", "boiled_drained", "boiled", "braised", "grilled", "baked", "hard_boiled", "other"];
