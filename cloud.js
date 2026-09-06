@@ -20626,9 +20626,55 @@ ${suffix}`;
     if (path === "sources/review") {
       return update(data.id, { ...data, status: data.approved ? "approved" : "pending", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), review_note: data.note });
     }
+    async function calculatedFoodComponents(parts) {
+      if (!Array.isArray(parts) || !parts.length || parts.length > 40) throw new Error("La preparaci\xF3n requiere entre 1 y 40 ingredientes.");
+      const totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 }, components = [];
+      for (const part of parts) {
+        const grams = Number(part.grams);
+        if (!Number.isFinite(grams) || grams <= 0 || grams > 1e5) throw new Error("Registra una cantidad v\xE1lida en gramos.");
+        const food = record(await row(part.food));
+        if (food.kind !== "food" || food.status !== "approved") throw new Error("Cada ingrediente necesita una composici\xF3n aprobada.");
+        for (const key of Object.keys(totals)) {
+          const value = Number(food.nutrients?.[key]);
+          if (!Number.isFinite(value)) throw new Error(`${food.name}: falta ${key} para calcular la receta.`);
+          totals[key] += value * grams / 100;
+        }
+        components.push({ food: food.id, grams, snapshot: food });
+      }
+      return { components, totals: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, Math.round(v * 1e4) / 1e4])) };
+    }
+    if (path === "recipes") {
+      const name = String(data.name || "").trim(), yieldAmount = Number(data.yield_amount), servings = Number(data.servings);
+      if (name.length < 2 || name.length > 200) throw new Error("Registra un nombre v\xE1lido para la receta.");
+      if (!Number.isFinite(yieldAmount) || yieldAmount <= 0 || !Number.isFinite(servings) || servings <= 0) throw new Error("Rendimiento y porciones deben ser mayores que cero.");
+      const calculated = await calculatedFoodComponents(data.components);
+      const perServing = Object.fromEntries(Object.entries(calculated.totals).map(([k, v]) => [k, Math.round(v / servings * 100) / 100]));
+      const body = { name, category: String(data.category || "Otro"), description: String(data.description || "").trim(), yield_amount: yieldAmount, yield_unit: String(data.yield_unit || "g"), servings, components: calculated.components, totals: calculated.totals, per_serving: perServing, instructions: String(data.instructions || "").trim(), status: "approved", calculation_basis: "Alimentos aprobados \xD7 gramos / 100 g", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), schema_version: 1 };
+      if (!body.instructions) throw new Error("Registra el procedimiento de elaboraci\xF3n.");
+      return data.id ? update(data.id, { ...body, rev: data.rev }) : insert("recipe", body);
+    }
     if (path === "plans") {
       await demo(data.patient);
-      const body = { ...clean(data), status: "draft", version: data.version || 1, approved_by: "", approved_at: "", dependencies: [] };
+      const items = [];
+      for (const raw of data.items || []) {
+        let parts = raw.components || [], recipeSnapshot = null, recipeServings = null;
+        if (raw.recipe) {
+          const recipe = record(await row(raw.recipe));
+          if (recipe.kind !== "recipe" || recipe.status !== "approved") throw new Error("La receta seleccionada no est\xE1 aprobada.");
+          recipeServings = Number(raw.recipe_servings || 1);
+          if (!Number.isFinite(recipeServings) || recipeServings <= 0) throw new Error("Las porciones de la receta deben ser mayores que cero.");
+          const factor = recipeServings / Number(recipe.servings);
+          parts = (recipe.components || []).map((c) => ({ food: c.food, grams: Number(c.grams) * factor }));
+          recipeSnapshot = recipe;
+        }
+        let item = { ...raw };
+        if (parts.length) {
+          const calculated = await calculatedFoodComponents(parts);
+          item = { ...item, recipe: recipeSnapshot?.id || "", recipe_servings: recipeServings, recipe_snapshot: recipeSnapshot, components: calculated.components, nutrients: calculated.totals, ingredients: calculated.components.map((c) => `${c.grams} g de ${c.snapshot.name} (${c.snapshot.state})`).join("\n"), nutrition_source: [...new Set(calculated.components.map((c) => c.snapshot.source))].join("; ") };
+        }
+        items.push(item);
+      }
+      const body = { ...clean(data), items, status: "draft", version: data.version || 1, approved_by: "", approved_at: "", dependencies: [] };
       return data.id ? update(data.id, body) : insert("plan", body, data.patient);
     }
     if (path === "prescriptions") {
