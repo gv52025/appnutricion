@@ -20600,8 +20600,20 @@ ${suffix}`;
       return result.data;
     }
     if (path === "foods") {
-      if (!data.confirmed) throw new Error("Confirma la composici\xF3n ficticia y su fuente.");
-      return insert("food", { name: data.name, state: data.state, source: data.source, nutrients: { kcal: Number(data.kcal), protein: Number(data.protein), carbs: Number(data.carbs), fat: Number(data.fat) }, basis: "100 g", status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString() });
+      if (!data.confirmed) throw new Error("Confirma la identidad, composici\xF3n y fuente.");
+      const name = String(data.canonical_name || "").trim().replace(/\s+/g, " "), brand = String(data.brand || "").trim().replace(/\s+/g, " "), stateCode = String(data.state_code || "");
+      const states = { raw: "Crudo", cooked: "Cocido", as_sold: "Como se vende", drained: "Drenado", reconstituted: "Reconstituido", prepared: "Preparado" };
+      if (name.length < 2 || name.length > 160) throw new Error("Registra un nombre can\xF3nico v\xE1lido.");
+      if (!states[stateCode]) throw new Error("Selecciona un estado normalizado.");
+      const nutrients = Object.fromEntries(["kcal", "protein", "carbs", "fat"].map((k) => [k, Number(data[k])]));
+      if (Object.values(nutrients).some((x) => !Number.isFinite(x) || x < 0)) throw new Error("La composici\xF3n contiene valores inv\xE1lidos.");
+      if (nutrients.kcal > 900 || ["protein", "carbs", "fat"].some((k) => nutrients[k] > 100)) throw new Error("La composici\xF3n excede el rango permitido por 100 g.");
+      const sourceName = String(data.source_name || "").trim(), sourceVersion = String(data.source_version || "").trim(), sourceLocator = String(data.source_locator || "").trim();
+      if (!sourceName || !sourceVersion || !sourceLocator) throw new Error("Completa fuente, versi\xF3n y ubicaci\xF3n exacta.");
+      const canonicalKey = [name, brand, stateCode].map((x) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()).join("|");
+      const duplicate = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("kind", "food").eq("body->>canonical_key", canonicalKey).eq("body->>status", "approved").maybeSingle());
+      if (duplicate) throw new Error("Ya existe un alimento aprobado con el mismo nombre, marca y estado.");
+      return insert("food", { name, canonical_name: name, brand, state_code: stateCode, state: states[stateCode], canonical_key: canonicalKey, basis: "100 g", basis_amount: 100, basis_unit: "g", edible_basis: true, source: `${sourceName} \xB7 ${sourceVersion} \xB7 ${sourceLocator}`, source_name: sourceName, source_version: sourceVersion, source_locator: sourceLocator, review_note: String(data.review_note || "").trim(), nutrients, status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), schema_version: 2 });
     }
     if (path === "sources") {
       return insert("source", { title: data.title, url: data.url, version: data.version, summary: data.summary, scope: data.scope, formula: "", status: "pending", reviewed_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) });
