@@ -20442,6 +20442,30 @@ ${suffix}`;
   };
   var clean = (data) => Object.fromEntries(Object.entries(data).filter(([k]) => !["id", "kind", "rev", "patient", "created", "updated", "stale"].includes(k)));
   var one = (value) => Array.isArray(value) ? value[0] : value;
+  var targetSpecs = { energia: { key: "kcal", percentFactor: 0 }, proteina: { key: "protein", percentFactor: 4 }, carbohidratos: { key: "carbs", percentFactor: 4 }, grasas: { key: "fat", percentFactor: 9 }, fibra: { key: "fiber", percentFactor: 0 }, calcio: { key: "calcium", percentFactor: 0 }, "vitamina d": { key: "vitamin_d", percentFactor: 0 }, sodio: { key: "sodium", percentFactor: 0 }, hierro: { key: "iron", percentFactor: 0 }, magnesio: { key: "magnesium", percentFactor: 0 }, potasio: { key: "potassium", percentFactor: 0 }, zinc: { key: "zinc", percentFactor: 0 }, "vitamina c": { key: "vitamin_c", percentFactor: 0 }, "vitamina b12": { key: "vitamin_b12", percentFactor: 0 } };
+  var norm = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  function planCompliance(items, targets, days) {
+    const byDay = Array.from({ length: days }, (_, day) => items.filter((x) => Number(x.day) === day));
+    return (targets || []).map((target) => {
+      const spec = targetSpecs[norm(target.nutrient)], numbers = (String(target.target || "").replace(/,/g, ".").match(/\d+(?:\.\d+)?/g) || []).map(Number), unit = norm(target.unit);
+      if (!spec || !numbers.length || unit.includes("kg")) return { nutrient: target.nutrient, target: `${target.target} ${target.unit}`, provided: "N/D", status: "no_evaluable", explanation: "Meta o unidad sin comparaci\xF3n matem\xE1tica directa; registra un valor o intervalo diario compatible.", source: "C\xE1lculo determinista del sistema" };
+      const min = numbers[0], max = numbers.length > 1 ? numbers[1] : numbers[0], values = byDay.map((day) => {
+        const parts = day.map((x) => x.nutrients?.[spec.key]);
+        if (!day.length || parts.some((v) => !Number.isFinite(v))) return null;
+        let value = parts.reduce((a, v) => a + Number(v), 0);
+        if (unit.includes("%")) {
+          if (!spec.percentFactor) return null;
+          const kcal = day.reduce((a, x) => a + Number(x.nutrients?.kcal || 0), 0);
+          if (!kcal) return null;
+          value = value * spec.percentFactor / kcal * 100;
+        } else if (spec.key === "vitamin_d" && unit.includes("ui")) value *= 40;
+        return Math.round(value * 100) / 100;
+      });
+      if (values.some((v) => v === null)) return { nutrient: target.nutrient, target: `${target.target} ${target.unit}`, provided: "N/D", status: "no_evaluable", explanation: "Faltan datos calculables en al menos un d\xEDa.", source: "Cat\xE1logo aprobado \xD7 gramos / 100 g" };
+      const valid = values.every((v) => v >= Math.min(min, max) && v <= Math.max(min, max)), mean = Math.round(values.reduce((a, v) => a + v, 0) / values.length * 100) / 100;
+      return { nutrient: target.nutrient, target: `${target.target} ${target.unit}`, provided: `Promedio ${mean}; d\xEDas ${values.join(", ")} ${target.unit}`, status: valid ? "cumple" : "no_cumple", explanation: valid ? "Todos los d\xEDas est\xE1n dentro del intervalo aprobado." : "Uno o m\xE1s d\xEDas est\xE1n fuera del intervalo aprobado.", source: "C\xE1lculo determinista desde alimentos aprobados" };
+    });
+  }
   async function invoke(name, body) {
     const result = await client.functions.invoke(name, { body });
     if (result.error) {
@@ -20638,7 +20662,7 @@ ${suffix}`;
       }
       const keys = [...new Set(components.flatMap((c) => Object.keys(c.snapshot.nutrients || {})))], totals = {};
       for (const key of keys) {
-        const values = components.map((c) => Number(c.snapshot.nutrients?.[key]));
+        const values = components.map((c) => c.snapshot.nutrients?.[key]);
         totals[key] = values.every(Number.isFinite) ? Math.round(components.reduce((sum, c, i) => sum + values[i] * c.grams / 100, 0) * 1e4) / 1e4 : null;
       }
       for (const key of ["kcal", "protein", "carbs", "fat"]) if (!Number.isFinite(totals[key])) throw new Error(`Falta ${key} para calcular la preparaci\xF3n.`);
@@ -20671,11 +20695,12 @@ ${suffix}`;
         let item = { ...raw };
         if (parts.length) {
           const calculated = await calculatedFoodComponents(parts);
-          item = { ...item, recipe: recipeSnapshot?.id || "", recipe_servings: recipeServings, recipe_snapshot: recipeSnapshot, components: calculated.components, nutrients: calculated.totals, ingredients: calculated.components.map((c) => `${c.grams} g de ${c.snapshot.name} (${c.snapshot.state})`).join("\n"), nutrition_source: [...new Set(calculated.components.map((c) => c.snapshot.source))].join("; ") };
+          item = { ...item, recipe: recipeSnapshot?.id || "", recipe_servings: recipeServings, recipe_snapshot: recipeSnapshot, components: calculated.components, nutrients: calculated.totals, ingredients: calculated.components.map((c) => `${c.grams} g de ${c.snapshot.name} (${c.snapshot.state})`).join("\n"), nutrition_source: [...new Set(calculated.components.map((c) => c.snapshot.source))].join("; "), calculation_basis: "Cat\xE1logo aprobado \xD7 gramos / 100 g", calculated_at: (/* @__PURE__ */ new Date()).toISOString() };
         }
         items.push(item);
       }
-      const body = { ...clean(data), items, status: "draft", version: data.version || 1, approved_by: "", approved_at: "", dependencies: [] };
+      const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "nutrition_prescription").eq("body->>visit", data.visit).eq("body->>status", "approved").maybeSingle()), days = Number(rx?.body?.rules?.days || 7);
+      const body = { ...clean(data), items, target_compliance: rx ? planCompliance(items, rx.body.targets || [], days) : [], status: "draft", version: data.version || 1, approved_by: "", approved_at: "", dependencies: [] };
       return data.id ? update(data.id, body) : insert("plan", body, data.patient);
     }
     if (path === "prescriptions") {
@@ -20692,8 +20717,15 @@ ${suffix}`;
       if (!rx) throw new Error("Aprueba primero la preparaci\xF3n cl\xEDnica del plan.");
       const daysRequired = Number(rx.body.rules?.days || 7), mealsRequired = Number(rx.body.rules?.meals_per_day || 3), incomplete = Array.from({ length: daysRequired }, (_, day) => (old.body.items || []).filter((x) => Number(x.day) === day).length < mealsRequired).some(Boolean);
       if (incomplete) throw new Error("El plan no contiene todos los tiempos solicitados.");
-      if (!(old.body.target_compliance || []).length) throw new Error("Falta la comparaci\xF3n contra los objetivos nutricionales.");
-      return update(data.id, { status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), review_note: data.review_note });
+      if ((old.body.items || []).some((x) => !Array.isArray(x.components) || !x.components.length || x.calculation_basis !== "Cat\xE1logo aprobado \xD7 gramos / 100 g")) throw new Error("Todas las preparaciones deben recalcularse desde alimentos o recetas aprobadas.");
+      const compliance = planCompliance(old.body.items || [], rx.body.targets || [], daysRequired);
+      if (!compliance.length) throw new Error("Falta la comparaci\xF3n contra los objetivos nutricionales.");
+      const failures = compliance.filter((x) => x.status !== "cumple");
+      if (failures.length) throw new Error(`El plan no cumple todos los objetivos: ${failures.map((x) => `${x.nutrient} (${x.status.replace("_", " ")})`).join(", ")}.`);
+      return update(data.id, { target_compliance: compliance, compliance_checked_at: (/* @__PURE__ */ new Date()).toISOString(), status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), review_note: data.review_note });
+    }
+    if (path === "plans/pdf") {
+      return invoke("generate-plan-pdf", { id: data.id });
     }
     if (path === "plans/discard") {
       const old = await row(data.id);
