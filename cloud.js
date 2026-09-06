@@ -1,4 +1,4 @@
-var NutricionCloud = (() => {
+(() => {
   // node_modules/@supabase/supabase-js/dist/tracingRegistry.mjs
   var EXTRACTOR_KEY = /* @__PURE__ */ Symbol.for("@supabase/supabase-js.traceContextExtractor");
   function getTraceContextExtractor() {
@@ -20706,6 +20706,14 @@ ${suffix}`;
     if (path === "prescriptions") {
       await demo(data.patient);
       if (!data.approved) throw new Error("Confirma la revisi\xF3n profesional.");
+      if (!Array.isArray(data.targets) || !data.targets.length) throw new Error("Registra al menos un objetivo nutricional.");
+      for (const target of data.targets) {
+        const spec = targetSpecs[norm(target.nutrient)], numbers = (String(target.target || "").replace(/,/g, ".").match(/\d+(?:\.\d+)?/g) || []).map(Number), unit = norm(target.unit);
+        if (!spec) throw new Error(`El objetivo ${target.nutrient} todav\xEDa no tiene una regla matem\xE1tica configurada.`);
+        if (!numbers.length || numbers.length > 2) throw new Error(`Registra ${target.nutrient} como cifra o intervalo, por ejemplo 80\u201390.`);
+        if (unit.includes("kg")) throw new Error(`Convierte ${target.nutrient} a una meta diaria antes de aprobar la preparaci\xF3n.`);
+        if (unit.includes("%") && !spec.percentFactor) throw new Error(`${target.nutrient} no puede evaluarse como porcentaje.`);
+      }
       const body = { ...clean(data), status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString() };
       return data.id ? update(data.id, body) : insert("nutrition_prescription", body, data.patient);
     }
