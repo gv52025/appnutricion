@@ -20603,6 +20603,8 @@ ${suffix}`;
       if (!data.confirmed) throw new Error("Confirma la identidad, composici\xF3n y fuente.");
       const name = String(data.canonical_name || "").trim().replace(/\s+/g, " "), brand = String(data.brand || "").trim().replace(/\s+/g, " "), stateCode = String(data.state_code || "");
       const states = { raw: "Crudo", cooked: "Cocido", as_sold: "Como se vende", drained: "Drenado", reconstituted: "Reconstituido", prepared: "Preparado" };
+      const categories = { 1: "Ma\xEDz, cereales y derivados", 2: "Leguminosas", 3: "Verduras y quelites", 4: "Frutas", 5: "Carnes y aves", 6: "Pescados y mariscos", 7: "Huevo", 8: "Leche, l\xE1cteos y sustitutos", 9: "Grasas, semillas y oleaginosas", 10: "Az\xFAcares, bebidas y condimentos", 11: "Productos habituales" }, categoryCode = Number(data.category_code);
+      if (!Number.isInteger(categoryCode) || !categories[categoryCode]) throw new Error("Selecciona una categor\xEDa v\xE1lida del 1 al 11.");
       const method = String(data.preparation_method || "");
       const methods = ["none", "boiled_drained", "boiled", "braised", "grilled", "baked", "hard_boiled", "other"];
       if (name.length < 2 || name.length > 160) throw new Error("Registra un nombre can\xF3nico v\xE1lido.");
@@ -20610,13 +20612,13 @@ ${suffix}`;
       if (!methods.includes(method) || stateCode === "raw" && method !== "none" || stateCode === "cooked" && method === "none") throw new Error("El m\xE9todo no corresponde al estado del alimento.");
       const nutrients = Object.fromEntries(["kcal", "protein", "carbs", "fat"].map((k) => [k, Number(data[k])]));
       if (Object.values(nutrients).some((x) => !Number.isFinite(x) || x < 0)) throw new Error("La composici\xF3n contiene valores inv\xE1lidos.");
-      if (nutrients.kcal > 900 || ["protein", "carbs", "fat"].some((k) => nutrients[k] > 100)) throw new Error("La composici\xF3n excede el rango permitido por 100 g.");
+      if (nutrients.kcal > 930 || ["protein", "carbs", "fat"].some((k) => nutrients[k] > 100)) throw new Error("La composici\xF3n excede el rango permitido por 100 g.");
       const sourceName = String(data.source_name || "").trim(), sourceVersion = String(data.source_version || "").trim(), sourceLocator = String(data.source_locator || "").trim();
       if (!sourceName || !sourceVersion || !sourceLocator) throw new Error("Completa fuente, versi\xF3n y ubicaci\xF3n exacta.");
       const canonicalKey = [name, brand, stateCode, method].map((x) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()).join("|");
       const duplicate = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("kind", "food").eq("body->>canonical_key", canonicalKey).eq("body->>status", "approved").maybeSingle());
       if (duplicate) throw new Error("Ya existe un alimento aprobado con el mismo nombre, marca y estado.");
-      return insert("food", { name, canonical_name: name, brand, state_code: stateCode, state: states[stateCode], preparation_method: method, canonical_key: canonicalKey, basis: "100 g", basis_amount: 100, basis_unit: "g", edible_basis: true, source: `${sourceName} \xB7 ${sourceVersion} \xB7 ${sourceLocator}`, source_name: sourceName, source_version: sourceVersion, source_locator: sourceLocator, review_note: String(data.review_note || "").trim(), nutrients, status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), schema_version: 2 });
+      return insert("food", { name, canonical_name: name, brand, category_code: categoryCode, category: categories[categoryCode], state_code: stateCode, state: states[stateCode], preparation_method: method, canonical_key: canonicalKey, basis: "100 g", basis_amount: 100, basis_unit: "g", edible_basis: true, source: `${sourceName} \xB7 ${sourceVersion} \xB7 ${sourceLocator}`, source_name: sourceName, source_version: sourceVersion, source_locator: sourceLocator, review_note: String(data.review_note || "").trim(), nutrients, status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), schema_version: 2 });
     }
     if (path === "sources") {
       return insert("source", { title: data.title, url: data.url, version: data.version, summary: data.summary, scope: data.scope, formula: "", status: "pending", reviewed_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) });
