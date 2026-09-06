@@ -20628,27 +20628,28 @@ ${suffix}`;
     }
     async function calculatedFoodComponents(parts) {
       if (!Array.isArray(parts) || !parts.length || parts.length > 40) throw new Error("La preparaci\xF3n requiere entre 1 y 40 ingredientes.");
-      const totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 }, components = [];
+      const components = [];
       for (const part of parts) {
         const grams = Number(part.grams);
         if (!Number.isFinite(grams) || grams <= 0 || grams > 1e5) throw new Error("Registra una cantidad v\xE1lida en gramos.");
         const food = record(await row(part.food));
         if (food.kind !== "food" || food.status !== "approved") throw new Error("Cada ingrediente necesita una composici\xF3n aprobada.");
-        for (const key of Object.keys(totals)) {
-          const value = Number(food.nutrients?.[key]);
-          if (!Number.isFinite(value)) throw new Error(`${food.name}: falta ${key} para calcular la receta.`);
-          totals[key] += value * grams / 100;
-        }
         components.push({ food: food.id, grams, snapshot: food });
       }
-      return { components, totals: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, Math.round(v * 1e4) / 1e4])) };
+      const keys = [...new Set(components.flatMap((c) => Object.keys(c.snapshot.nutrients || {})))], totals = {};
+      for (const key of keys) {
+        const values = components.map((c) => Number(c.snapshot.nutrients?.[key]));
+        totals[key] = values.every(Number.isFinite) ? Math.round(components.reduce((sum, c, i) => sum + values[i] * c.grams / 100, 0) * 1e4) / 1e4 : null;
+      }
+      for (const key of ["kcal", "protein", "carbs", "fat"]) if (!Number.isFinite(totals[key])) throw new Error(`Falta ${key} para calcular la preparaci\xF3n.`);
+      return { components, totals };
     }
     if (path === "recipes") {
       const name = String(data.name || "").trim(), yieldAmount = Number(data.yield_amount), servings = Number(data.servings);
       if (name.length < 2 || name.length > 200) throw new Error("Registra un nombre v\xE1lido para la receta.");
       if (!Number.isFinite(yieldAmount) || yieldAmount <= 0 || !Number.isFinite(servings) || servings <= 0) throw new Error("Rendimiento y porciones deben ser mayores que cero.");
       const calculated = await calculatedFoodComponents(data.components);
-      const perServing = Object.fromEntries(Object.entries(calculated.totals).map(([k, v]) => [k, Math.round(v / servings * 100) / 100]));
+      const perServing = Object.fromEntries(Object.entries(calculated.totals).map(([k, v]) => [k, v === null ? null : Math.round(v / servings * 100) / 100]));
       const body = { name, category: String(data.category || "Otro"), description: String(data.description || "").trim(), yield_amount: yieldAmount, yield_unit: String(data.yield_unit || "g"), servings, components: calculated.components, totals: calculated.totals, per_serving: perServing, instructions: String(data.instructions || "").trim(), status: "approved", calculation_basis: "Alimentos aprobados \xD7 gramos / 100 g", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), schema_version: 1 };
       if (!body.instructions) throw new Error("Registra el procedimiento de elaboraci\xF3n.");
       return data.id ? update(data.id, { ...body, rev: data.rev }) : insert("recipe", body);
