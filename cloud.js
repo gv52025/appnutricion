@@ -20444,6 +20444,10 @@ ${suffix}`;
   var one = (value) => Array.isArray(value) ? value[0] : value;
   var targetSpecs = { energia: { key: "kcal", percentFactor: 0 }, proteina: { key: "protein", percentFactor: 4 }, carbohidratos: { key: "carbs", percentFactor: 4 }, grasas: { key: "fat", percentFactor: 9 }, fibra: { key: "fiber", percentFactor: 0 }, calcio: { key: "calcium", percentFactor: 0 }, "vitamina d": { key: "vitamin_d", percentFactor: 0 }, sodio: { key: "sodium", percentFactor: 0 }, hierro: { key: "iron", percentFactor: 0 }, magnesio: { key: "magnesium", percentFactor: 0 }, potasio: { key: "potassium", percentFactor: 0 }, zinc: { key: "zinc", percentFactor: 0 }, "vitamina c": { key: "vitamin_c", percentFactor: 0 }, "vitamina b12": { key: "vitamin_b12", percentFactor: 0 } };
   var norm = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  var labAliases = { glucosa: ["glucosa", "glucose"], hba1c: ["hba1c", "hemoglobina glucosilada", "hemoglobina glicosilada"], colesterol_total: ["colesterol total", "total cholesterol"], ldl_c: ["ldl", "ldl-c", "colesterol ldl"], hdl_c: ["hdl", "hdl-c", "colesterol hdl"], trigliceridos: ["trigliceridos", "triglycerides"], tsh: ["tsh", "tirotropina"], t4_libre: ["t4 libre", "t4l", "free t4"], vitamina_d_25_oh: ["vitamina d 25-oh", "25-oh vitamina d", "25-hidroxivitamina d"], ferritina: ["ferritina", "ferritin"] };
+  var labKey = (label) => Object.entries(labAliases).find(([, aliases]) => aliases.map(norm).includes(norm(label)))?.[0] || norm(label).replace(/[^a-z0-9]+/g, "_");
+  var labUnit = (unit) => norm(unit).replace(/μ/g, "\xB5").replace(/\s/g, "");
+  var labMethod = (method) => norm(method).replace(/\s*[·-]\s*/g, " \xB7 ");
   function planCompliance(items, targets, days) {
     const byDay = Array.from({ length: days }, (_, day) => items.filter((x) => Number(x.day) === day));
     return (targets || []).map((target) => {
@@ -20592,12 +20596,13 @@ ${suffix}`;
     }
     if (path === "observations") {
       await demo(data.patient);
-      return insert("observation", { ...clean(data), status: data.origin === "ocr" ? "pending" : data.confirmed ? "approved" : "pending", reviewed_at: data.confirmed ? (/* @__PURE__ */ new Date()).toISOString() : "", reviewed_by: data.confirmed ? session.user.email : "" }, data.patient);
+      return insert("observation", { ...clean(data), canonical_label: labKey(data.label), normalized_unit: labUnit(data.unit), method_group: labMethod(data.method), normalization_version: 1, status: data.origin === "ocr" ? "pending" : data.confirmed ? "approved" : "pending", reviewed_at: data.confirmed ? (/* @__PURE__ */ new Date()).toISOString() : "", reviewed_by: data.confirmed ? session.user.email : "" }, data.patient);
     }
     if (path === "observations/review") {
       const old = await row(data.id);
       await demo(old.patient_id);
-      return update(data.id, { ...data, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), reviewed_by: session.user.email });
+      const label = data.label || old.body.label, unit = data.unit ?? old.body.unit, method = data.method || old.body.method;
+      return update(data.id, { ...data, canonical_label: labKey(label), normalized_unit: labUnit(unit), method_group: labMethod(method), normalization_version: 1, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), reviewed_by: session.user.email });
     }
     if (path === "evaluations") {
       await demo(data.patient);
