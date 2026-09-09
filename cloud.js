@@ -20610,8 +20610,34 @@ ${suffix}`;
     }
     if (path === "evaluations") {
       await demo(data.patient);
-      const body = { ...clean(data), status: "draft", author: session.user.email, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), source_snapshot: data.source_snapshot || {} };
+      if (data.id) {
+        const old = record(await row(data.id));
+        if (old.status === "approved") throw new Error("La evaluaci\xF3n aprobada est\xE1 bloqueada. Crea una nueva versi\xF3n.");
+      }
+      const body = { ...clean(data), status: "draft", version: Number(data.version || 1), author: session.user.email, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), source_snapshot: data.source_snapshot || {} };
       return data.id ? update(data.id, body) : insert("evaluation", body, data.patient);
+    }
+    if (path === "evaluations/approve") {
+      const old = await row(data.id);
+      await demo(old.patient_id);
+      if (old.kind !== "evaluation" || old.body?.status !== "draft") throw new Error("Solo se aprueban evaluaciones en borrador.");
+      if (!data.confirmed) throw new Error("Confirma la revisi\xF3n y firma profesional.");
+      const required = ["history_synthesis", "data_synthesis", "nutrition_problems", "monitoring", "professional_judgment", "next_steps"];
+      const missing = required.filter((k) => !String(old.body?.[k] || "").trim());
+      if (missing.length) throw new Error("Completa todos los apartados cl\xEDnicos obligatorios antes de aprobar.");
+      const related = unwrap(await client.from("records").select("id,kind,revision,body").eq("workspace_id", workspace).eq("patient_id", old.patient_id));
+      const pending = (related || []).filter((x) => x.kind === "observation" && x.body?.visit === old.body?.visit && x.body?.status === "pending");
+      if (pending.length) throw new Error("Hay mediciones o resultados pendientes de revisi\xF3n.");
+      const unidentified = (related || []).filter((x) => x.kind === "document" && x.body?.visit === old.body?.visit && !x.body?.identity_verified);
+      if (unidentified.length) throw new Error("Hay estudios cuya identidad no ha sido cotejada.");
+      const snapshot = (related || []).filter((x) => x.kind === "visit" && x.id === old.body?.visit || x.kind === "observation" && x.body?.status === "approved" || x.kind === "document" && x.body?.identity_verified).map((x) => ({ id: x.id, kind: x.kind, rev: x.revision }));
+      return update(data.id, { status: "approved", signed_by: session.user.email, signed_at: (/* @__PURE__ */ new Date()).toISOString(), approval_note: String(data.note || "").trim(), source_snapshot_final: snapshot });
+    }
+    if (path === "evaluations/clone") {
+      const old = record(await row(data.id));
+      await demo(old.patient);
+      if (old.kind !== "evaluation" || old.status !== "approved") throw new Error("Solo se versiona una evaluaci\xF3n aprobada.");
+      return insert("evaluation", { ...clean(old), status: "draft", version: Number(old.version || 1) + 1, parent: old.id, visit: data.visit || old.visit, signed_by: "", signed_at: "", approval_note: "", source_snapshot_final: [] }, old.patient);
     }
     if (path === "demo/yuri") {
       const result = await client.functions.invoke("seed-yuri-demo", { body: data });
@@ -20741,6 +20767,8 @@ ${suffix}`;
       if (!data.clinical_review || !data.consistency_review) throw new Error("Confirma ambas revisiones.");
       const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "nutrition_prescription").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").maybeSingle());
       if (!rx) throw new Error("Aprueba primero la preparaci\xF3n cl\xEDnica del plan.");
+      const evaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "evaluation").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").maybeSingle());
+      if (!evaluation) throw new Error("Aprueba y firma primero la evaluaci\xF3n nutricional de esta consulta.");
       const daysRequired = Number(rx.body.rules?.days || 7), mealsRequired = Number(rx.body.rules?.meals_per_day || 3), incomplete = Array.from({ length: daysRequired }, (_, day) => (old.body.items || []).filter((x) => Number(x.day) === day).length < mealsRequired).some(Boolean);
       if (incomplete) throw new Error("El plan no contiene todos los tiempos solicitados.");
       if ((old.body.items || []).some((x) => !Array.isArray(x.components) || !x.components.length || x.calculation_basis !== "Cat\xE1logo aprobado \xD7 gramos / 100 g")) throw new Error("Todas las preparaciones deben recalcularse desde alimentos o recetas aprobadas.");
