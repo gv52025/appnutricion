@@ -20625,6 +20625,8 @@ ${suffix}`;
       const required = ["history_synthesis", "data_synthesis", "nutrition_problems", "monitoring", "professional_judgment", "next_steps"];
       const missing = required.filter((k) => !String(old.body?.[k] || "").trim());
       if (missing.length) throw new Error("Completa todos los apartados cl\xEDnicos obligatorios antes de aprobar.");
+      const diagnoses = old.body?.diagnoses || [];
+      if (!Array.isArray(diagnoses) || !diagnoses.length || diagnoses.some((d) => !String(d.problem || "").trim() || !String(d.etiology || "").trim() || !String(d.evidence || "").trim() || !String(d.status || "").trim())) throw new Error("Registra al menos un diagn\xF3stico nutricional estructurado con problema, etiolog\xEDa, evidencia y estado.");
       const related = unwrap(await client.from("records").select("id,kind,revision,body").eq("workspace_id", workspace).eq("patient_id", old.patient_id));
       const pending = (related || []).filter((x) => x.kind === "observation" && x.body?.visit === old.body?.visit && x.body?.status === "pending");
       if (pending.length) throw new Error("Hay mediciones o resultados pendientes de revisi\xF3n.");
@@ -20749,6 +20751,8 @@ ${suffix}`;
     }
     if (path === "prescriptions") {
       await demo(data.patient);
+      const approvedEvaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "evaluation").eq("body->>visit", data.visit).eq("body->>status", "approved").maybeSingle());
+      if (!approvedEvaluation) throw new Error("Aprueba y firma primero la evaluaci\xF3n nutricional.");
       if (!data.approved) throw new Error("Confirma la revisi\xF3n profesional.");
       if (!Array.isArray(data.targets) || !data.targets.length) throw new Error("Registra al menos un objetivo nutricional.");
       for (const target of data.targets) {
