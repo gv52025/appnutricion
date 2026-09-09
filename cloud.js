@@ -20484,7 +20484,7 @@ ${suffix}`;
     return result.data;
   }
   async function context() {
-    const member = unwrap(await client.from("workspace_members").select("workspace_id,role").limit(1).maybeSingle());
+    const member = unwrap(await client.from("workspace_members").select("workspace_id,role,permissions,active").eq("active", true).limit(1).maybeSingle());
     if (!member) throw new Error("El usuario no tiene un espacio cl\xEDnico asignado.");
     workspace = member.workspace_id;
     return member;
@@ -20515,7 +20515,7 @@ ${suffix}`;
       return { configured: true, authenticated: !!session2, cloud: true, version: "0.3.0" };
     }
     if (path === "login") {
-      const result = await client.auth.signInWithPassword({ email: cfg.loginEmail, password: data.password });
+      const result = await client.auth.signInWithPassword({ email: String(data.email || "").trim().toLowerCase(), password: data.password });
       if (result.error) throw new Error("Correo o contrase\xF1a incorrectos.");
       return { ok: true };
     }
@@ -20538,8 +20538,11 @@ ${suffix}`;
       const audios = (unwrap(audioResult) || []).map((x) => ({ ...x, id: x.id, kind: "recording", patient: x.patient_id, visit: x.visit_id, created: x.created_at }));
       const transcripts = (unwrap(transcriptResult) || []).map((x) => ({ ...x, id: x.id, kind: "transcript", recording: x.recording_id, created: x.created_at }));
       const settings = Object.fromEntries(settingRows.map((x) => [x.key, x.value]));
-      return { records: [...rows.map(record), ...audios, ...transcripts], csrf: "cloud", profile: { name: profile.display_name || session.user.email, credential: profile.professional_credential || "", contact: profile.contact || "", ...settings.profile || {} }, api: { ...settings.api || {}, key_available: true }, config: { clinical: settings.clinical || cfg.defaults.clinical, documents: settings.documents || cfg.defaults.documents, pdf: settings.pdf || cfg.defaults.pdf, security: settings.security || cfg.defaults.security, backup: settings.backup || {} }, diagnostics: { database_integrity: "Supabase", records: rows.length, documents: rows.filter((x) => x.kind === "document").length, database_mb: "\u2014", document_mb: "\u2014", data_directory: "Supabase \xB7 " + workspace, version: "0.5.0" }, fields: cfg.historyFields || [], version: "0.5.0", cloud: true, test_mode: true, role: member.role };
+      return { records: [...rows.map(record), ...audios, ...transcripts], csrf: "cloud", profile: { name: profile.display_name || session.user.email, email: session.user.email, credential: profile.professional_credential || "", contact: profile.contact || "", ...settings.profile || {} }, api: { ...settings.api || {}, key_available: true }, config: { clinical: settings.clinical || cfg.defaults.clinical, documents: settings.documents || cfg.defaults.documents, pdf: settings.pdf || cfg.defaults.pdf, security: settings.security || cfg.defaults.security, backup: settings.backup || {} }, diagnostics: { database_integrity: "Supabase", records: rows.length, documents: rows.filter((x) => x.kind === "document").length, database_mb: "\u2014", document_mb: "\u2014", data_directory: "Supabase \xB7 " + workspace, version: "0.6.0" }, fields: cfg.historyFields || [], version: "0.6.0", cloud: true, test_mode: true, role: member.role, access: { role: member.role, permissions: member.permissions || {}, active: member.active } };
     }
+    if (path === "users/list") return invoke("manage-workspace-users", { action: "list" });
+    if (path === "users/create") return invoke("manage-workspace-users", { action: "create", ...data });
+    if (path === "users/update") return invoke("manage-workspace-users", { action: "update", ...data });
     if (path === "patients") {
       const row2 = unwrap(await client.rpc("create_patient", { p_name: data.name, p_dob: data.dob || null, p_contact: data.contact || "", p_modules: data.modules || [], p_demo: !!data.demo }));
       return record(one(row2));
