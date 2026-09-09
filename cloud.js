@@ -20442,7 +20442,8 @@ ${suffix}`;
   };
   var clean = (data) => Object.fromEntries(Object.entries(data).filter(([k]) => !["id", "kind", "rev", "patient", "created", "updated", "stale"].includes(k)));
   var one = (value) => Array.isArray(value) ? value[0] : value;
-  var targetSpecs = { energia: { key: "kcal", percentFactor: 0 }, proteina: { key: "protein", percentFactor: 4 }, carbohidratos: { key: "carbs", percentFactor: 4 }, grasas: { key: "fat", percentFactor: 9 }, fibra: { key: "fiber", percentFactor: 0 }, calcio: { key: "calcium", percentFactor: 0 }, "vitamina d": { key: "vitamin_d", percentFactor: 0 }, sodio: { key: "sodium", percentFactor: 0 }, hierro: { key: "iron", percentFactor: 0 }, magnesio: { key: "magnesium", percentFactor: 0 }, potasio: { key: "potassium", percentFactor: 0 }, zinc: { key: "zinc", percentFactor: 0 }, "vitamina c": { key: "vitamin_c", percentFactor: 0 }, "vitamina b12": { key: "vitamin_b12", percentFactor: 0 } };
+  var targetSpecs = { energia: { key: "kcal", percentFactor: 0 }, proteina: { key: "protein", percentFactor: 4 }, carbohidratos: { key: "carbs", percentFactor: 4 }, grasas: { key: "fat", percentFactor: 9 }, fibra: { key: "fiber", percentFactor: 0 }, azucares: { key: "sugars", percentFactor: 4 }, "grasa saturada": { key: "saturated_fat", percentFactor: 9 }, sodio: { key: "sodium", percentFactor: 0 }, calcio: { key: "calcium", percentFactor: 0 }, hierro: { key: "iron", percentFactor: 0 }, magnesio: { key: "magnesium", percentFactor: 0 }, fosforo: { key: "phosphorus", percentFactor: 0 }, potasio: { key: "potassium", percentFactor: 0 }, zinc: { key: "zinc", percentFactor: 0 }, colesterol: { key: "cholesterol", percentFactor: 0 }, "vitamina a": { key: "vitamin_a_rae", percentFactor: 0 }, "vitamina c": { key: "vitamin_c", percentFactor: 0 }, "vitamina d": { key: "vitamin_d", percentFactor: 0 }, "vitamina e": { key: "vitamin_e", percentFactor: 0 }, "vitamina k": { key: "vitamin_k", percentFactor: 0 }, "vitamina b12": { key: "vitamin_b12", percentFactor: 0 } };
+  var nutrientFields = { kcal: { label: "Energ\xEDa", unit: "kcal", max: 930, required: true }, protein: { label: "Prote\xEDna", unit: "g", max: 100, required: true }, carbs: { label: "Hidratos de carbono", unit: "g", max: 100, required: true }, fat: { label: "Grasa total", unit: "g", max: 100, required: true }, fiber: { label: "Fibra diet\xE9tica", unit: "g", max: 100 }, sugars: { label: "Az\xFAcares totales", unit: "g", max: 100 }, saturated_fat: { label: "Grasa saturada", unit: "g", max: 100 }, sodium: { label: "Sodio", unit: "mg", max: 5e4 }, calcium: { label: "Calcio", unit: "mg", max: 1e4 }, iron: { label: "Hierro", unit: "mg", max: 1e3 }, magnesium: { label: "Magnesio", unit: "mg", max: 1e4 }, phosphorus: { label: "F\xF3sforo", unit: "mg", max: 1e4 }, potassium: { label: "Potasio", unit: "mg", max: 2e4 }, zinc: { label: "Zinc", unit: "mg", max: 1e3 }, cholesterol: { label: "Colesterol", unit: "mg", max: 5e3 }, vitamin_a_rae: { label: "Vitamina A, RAE", unit: "\xB5g", max: 1e5 }, vitamin_c: { label: "Vitamina C", unit: "mg", max: 1e4 }, vitamin_d: { label: "Vitamina D", unit: "\xB5g", max: 1e4 }, vitamin_e: { label: "Vitamina E", unit: "mg", max: 1e4 }, vitamin_k: { label: "Vitamina K", unit: "\xB5g", max: 1e5 }, vitamin_b12: { label: "Vitamina B12", unit: "\xB5g", max: 1e5 } };
   var norm = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   var labAliases = { glucosa: ["glucosa", "glucose"], hba1c: ["hba1c", "hemoglobina glucosilada", "hemoglobina glicosilada"], colesterol_total: ["colesterol total", "total cholesterol"], ldl_c: ["ldl", "ldl-c", "colesterol ldl"], hdl_c: ["hdl", "hdl-c", "colesterol hdl"], trigliceridos: ["trigliceridos", "triglycerides"], tsh: ["tsh", "tirotropina"], t4_libre: ["t4 libre", "t4l", "free t4"], vitamina_d_25_oh: ["vitamina d 25-oh", "25-oh vitamina d", "25-hidroxivitamina d"], ferritina: ["ferritina", "ferritin"] };
   var labKey = (label) => Object.entries(labAliases).find(([, aliases]) => aliases.map(norm).includes(norm(label)))?.[0] || norm(label).replace(/[^a-z0-9]+/g, "_");
@@ -20642,9 +20643,18 @@ ${suffix}`;
       if (name.length < 2 || name.length > 160) throw new Error("Registra un nombre can\xF3nico v\xE1lido.");
       if (!states[stateCode]) throw new Error("Selecciona un estado normalizado.");
       if (!methods.includes(method) || stateCode === "raw" && method !== "none" || stateCode === "cooked" && method === "none") throw new Error("El m\xE9todo no corresponde al estado del alimento.");
-      const nutrients = Object.fromEntries(["kcal", "protein", "carbs", "fat"].map((k) => [k, Number(data[k])]));
-      if (Object.values(nutrients).some((x) => !Number.isFinite(x) || x < 0)) throw new Error("La composici\xF3n contiene valores inv\xE1lidos.");
-      if (nutrients.kcal > 930 || ["protein", "carbs", "fat"].some((k) => nutrients[k] > 100)) throw new Error("La composici\xF3n excede el rango permitido por 100 g.");
+      const nutrients = {};
+      for (const [key, spec] of Object.entries(nutrientFields)) {
+        const raw = data[key];
+        if (raw === "" || raw === null || raw === void 0) {
+          if (spec.required) throw new Error(`Falta ${spec.label}.`);
+          nutrients[key] = null;
+          continue;
+        }
+        const value = Number(raw);
+        if (!Number.isFinite(value) || value < 0 || value > spec.max) throw new Error(`${spec.label} contiene un valor inv\xE1lido por 100 g.`);
+        nutrients[key] = value;
+      }
       const sourceName = String(data.source_name || "").trim(), sourceVersion = String(data.source_version || "").trim(), sourceLocator = String(data.source_locator || "").trim();
       if (!sourceName || !sourceVersion || !sourceLocator) throw new Error("Completa fuente, versi\xF3n y ubicaci\xF3n exacta.");
       const canonicalKey = [name, brand, stateCode, method].map((x) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()).join("|");
