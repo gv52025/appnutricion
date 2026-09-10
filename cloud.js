@@ -20437,7 +20437,7 @@ ${suffix}`;
   var client = createClient(cfg.url, cfg.publicKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   var workspace = "";
   var unwrap = (r) => {
-    if (r.error) throw new Error(r.error.message);
+    if (r.error) throw new Error([r.error.message, r.error.details, r.error.hint, r.error.code].filter(Boolean).join(" \xB7 "));
     return r.data;
   };
   var clean = (data) => Object.fromEntries(Object.entries(data).filter(([k]) => !["id", "kind", "rev", "patient", "created", "updated", "stale"].includes(k)));
@@ -20781,7 +20781,12 @@ ${suffix}`;
       return data.id ? update(data.id, body) : insert("nutrition_prescription", body, data.patient);
     }
     if (path === "plans/approve") {
-      const old = await row(data.id);
+      let old;
+      try {
+        old = await row(data.id);
+      } catch (error) {
+        throw new Error(`No se pudo leer el plan: ${error.message}`);
+      }
       await demo(old.patient_id);
       if (!data.clinical_review || !data.consistency_review) throw new Error("Confirma ambas revisiones.");
       const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "nutrition_prescription").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").order("updated_at", { ascending: false }).limit(1).maybeSingle());
@@ -20797,7 +20802,11 @@ ${suffix}`;
       if (!compliance.length) throw new Error("Falta la comparaci\xF3n contra los objetivos nutricionales.");
       const failures = compliance.filter((x) => x.status !== "cumple");
       if (failures.length) throw new Error(`El plan no cumple todos los objetivos: ${failures.map((x) => `${x.nutrient} (${x.status.replace("_", " ")})`).join(", ")}.`);
-      return update(data.id, { target_compliance: compliance, compliance_checked_at: (/* @__PURE__ */ new Date()).toISOString(), status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), review_note: data.review_note });
+      try {
+        return await update(data.id, { target_compliance: compliance, compliance_checked_at: (/* @__PURE__ */ new Date()).toISOString(), status: "approved", approved_by: session.user.email, approved_at: (/* @__PURE__ */ new Date()).toISOString(), review_note: data.review_note });
+      } catch (error) {
+        throw new Error(`No se pudo guardar la aprobaci\xF3n del plan: ${error.message}`);
+      }
     }
     if (path === "plans/pdf") {
       return invoke("generate-plan-pdf", { id: data.id });
