@@ -20660,6 +20660,19 @@ ${suffix}`;
       if (result.data?.error) throw new Error(result.data.error);
       return result.data;
     }
+    if (path === "demo/quality-control") {
+      const result = await client.functions.invoke("seed-quality-control", { body: data });
+      if (result.error) {
+        let detail = "";
+        try {
+          detail = (await result.error.context?.json())?.error || "";
+        } catch {
+        }
+        throw new Error(detail || result.error.message);
+      }
+      if (result.data?.error) throw new Error(result.data.error);
+      return result.data;
+    }
     if (path === "foods") {
       if (!data.confirmed) throw new Error("Confirma la identidad, composici\xF3n y fuente.");
       const name = String(data.canonical_name || "").trim().replace(/\s+/g, " "), brand = String(data.brand || "").trim().replace(/\s+/g, " "), stateCode = String(data.state_code || "");
