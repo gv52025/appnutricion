@@ -20753,6 +20753,8 @@ ${suffix}`;
       await demo(data.patient);
       const approvedEvaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "evaluation").eq("body->>visit", data.visit).eq("body->>status", "approved").maybeSingle());
       if (!approvedEvaluation) throw new Error("Aprueba y firma primero la evaluaci\xF3n nutricional.");
+      const safetyKeys = ["safety_allergies", "safety_organs", "safety_reproductive", "safety_ed", "safety_interactions", "safety_referral"];
+      if (safetyKeys.some((k) => data.safety_review?.[k] !== true)) throw new Error("Completa toda la revisi\xF3n de seguridad cl\xEDnica antes de aprobar la prescripci\xF3n.");
       if (!data.approved) throw new Error("Confirma la revisi\xF3n profesional.");
       if (!Array.isArray(data.targets) || !data.targets.length) throw new Error("Registra al menos un objetivo nutricional.");
       for (const target of data.targets) {
@@ -20771,6 +20773,8 @@ ${suffix}`;
       if (!data.clinical_review || !data.consistency_review) throw new Error("Confirma ambas revisiones.");
       const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "nutrition_prescription").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").maybeSingle());
       if (!rx) throw new Error("Aprueba primero la preparaci\xF3n cl\xEDnica del plan.");
+      const safetyKeys = ["safety_allergies", "safety_organs", "safety_reproductive", "safety_ed", "safety_interactions", "safety_referral"];
+      if (safetyKeys.some((k) => rx.body?.safety_review?.[k] !== true)) throw new Error("La prescripci\xF3n no contiene una revisi\xF3n de seguridad cl\xEDnica completa. Rev\xEDsala nuevamente.");
       const evaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "evaluation").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").maybeSingle());
       if (!evaluation) throw new Error("Aprueba y firma primero la evaluaci\xF3n nutricional de esta consulta.");
       const daysRequired = Number(rx.body.rules?.days || 7), mealsRequired = Number(rx.body.rules?.meals_per_day || 3), incomplete = Array.from({ length: daysRequired }, (_, day) => (old.body.items || []).filter((x) => Number(x.day) === day).length < mealsRequired).some(Boolean);
