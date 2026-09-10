@@ -20758,13 +20758,13 @@ ${suffix}`;
         }
         items.push(item);
       }
-      const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "nutrition_prescription").eq("body->>visit", data.visit).eq("body->>status", "approved").maybeSingle()), days = Number(rx?.body?.rules?.days || 7);
+      const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "nutrition_prescription").eq("body->>visit", data.visit).eq("body->>status", "approved").order("updated_at", { ascending: false }).limit(1).maybeSingle()), days = Number(rx?.body?.rules?.days || 7);
       const body = { ...clean(data), items, target_compliance: rx ? planCompliance(items, rx.body.targets || [], days) : [], status: "draft", version: data.version || 1, approved_by: "", approved_at: "", dependencies: [] };
       return data.id ? update(data.id, body) : insert("plan", body, data.patient);
     }
     if (path === "prescriptions") {
       await demo(data.patient);
-      const approvedEvaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "evaluation").eq("body->>visit", data.visit).eq("body->>status", "approved").maybeSingle());
+      const approvedEvaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "evaluation").eq("body->>visit", data.visit).eq("body->>status", "approved").order("updated_at", { ascending: false }).limit(1).maybeSingle());
       if (!approvedEvaluation) throw new Error("Aprueba y firma primero la evaluaci\xF3n nutricional.");
       const safetyKeys = ["safety_allergies", "safety_organs", "safety_reproductive", "safety_ed", "safety_interactions", "safety_referral"];
       if (safetyKeys.some((k) => data.safety_review?.[k] !== true)) throw new Error("Completa toda la revisi\xF3n de seguridad cl\xEDnica antes de aprobar la prescripci\xF3n.");
@@ -20784,11 +20784,11 @@ ${suffix}`;
       const old = await row(data.id);
       await demo(old.patient_id);
       if (!data.clinical_review || !data.consistency_review) throw new Error("Confirma ambas revisiones.");
-      const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "nutrition_prescription").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").maybeSingle());
+      const rx = unwrap(await client.from("records").select("body").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "nutrition_prescription").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").order("updated_at", { ascending: false }).limit(1).maybeSingle());
       if (!rx) throw new Error("Aprueba primero la preparaci\xF3n cl\xEDnica del plan.");
       const safetyKeys = ["safety_allergies", "safety_organs", "safety_reproductive", "safety_ed", "safety_interactions", "safety_referral"];
       if (safetyKeys.some((k) => rx.body?.safety_review?.[k] !== true)) throw new Error("La prescripci\xF3n no contiene una revisi\xF3n de seguridad cl\xEDnica completa. Rev\xEDsala nuevamente.");
-      const evaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "evaluation").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").maybeSingle());
+      const evaluation = unwrap(await client.from("records").select("id").eq("workspace_id", workspace).eq("patient_id", old.patient_id).eq("kind", "evaluation").eq("body->>visit", old.body?.visit).eq("body->>status", "approved").order("updated_at", { ascending: false }).limit(1).maybeSingle());
       if (!evaluation) throw new Error("Aprueba y firma primero la evaluaci\xF3n nutricional de esta consulta.");
       const daysRequired = Number(rx.body.rules?.days || 7), mealsRequired = Number(rx.body.rules?.meals_per_day || 3), incomplete = Array.from({ length: daysRequired }, (_, day) => (old.body.items || []).filter((x) => Number(x.day) === day).length < mealsRequired).some(Boolean);
       if (incomplete) throw new Error("El plan no contiene todos los tiempos solicitados.");
@@ -20816,7 +20816,7 @@ ${suffix}`;
     }
     if (path === "plans/ai") {
       await demo(data.patient);
-      const rx = unwrap(await client.from("records").select("id,body").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "nutrition_prescription").eq("body->>visit", data.visit).eq("body->>status", "approved").maybeSingle());
+      const rx = unwrap(await client.from("records").select("id,body").eq("workspace_id", workspace).eq("patient_id", data.patient).eq("kind", "nutrition_prescription").eq("body->>visit", data.visit).eq("body->>status", "approved").order("updated_at", { ascending: false }).limit(1).maybeSingle());
       if (!rx) throw new Error("Aprueba primero la preparaci\xF3n cl\xEDnica del plan.");
       return invoke("clinical-plan-assistant", { ...data, plan_days: Number(rx.body?.rules?.days || 7) });
     }
