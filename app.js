@@ -200,7 +200,7 @@ async function handle(action,id){
  else if(action==='new-patient')newPatient();
  else if(action==='seed-yuri'){const result=await api('demo/yuri',{});await refresh();patientId=result.patient_id;visitId=result.followup_visit;route='patient';tab='evaluation';render();toast('Caso ficticio de Yuri Vega preparado correctamente.')}
  else if(action==='seed-estela'){const result=await api('demo/estela',{});await refresh();patientId=result.patient_id;visitId=result.latest_visit;route='patient';tab='history';render();toast('Expediente ficticio completo de Estela Vega preparado correctamente.')}
- else if(action==='seed-quality'){const result=await api('demo/quality-control',{});await refresh();patientId=result.patient_id;visitId=result.latest_visit;route='patient';tab='intervention';render();toast(`Control integral preparado: ${result.meals} tiempos y ${result.nutrients} nutrientes calculados.`)}
+ else if(action==='seed-quality'){const result=await api('demo/quality-control',{});await refresh();patientId=result.patient_id;visitId=result.latest_visit;route='patient';tab='menu';render();toast(`Control integral preparado: ${result.meals} tiempos y ${result.nutrients} nutrientes calculados.`)}
  else if(action==='open-patient'){if(!guard())return;patientId=id;visitId=list('visit',id)[0]?.id||'';route='patient';tab='history';render()}
  else if(action==='open-clinical'){if(!guard())return;const [pid,vid,targetTab]=id.split('|');patientId=pid;visitId=vid||list('visit',pid)[0]?.id||'';route='patient';tab=targetTab||'history';render()}
  else if(action==='new-visit'){if(!guard())return;newVisit(id)}
